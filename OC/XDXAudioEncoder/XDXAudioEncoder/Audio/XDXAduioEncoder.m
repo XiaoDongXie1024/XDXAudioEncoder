@@ -63,8 +63,11 @@ OSStatus EncodeConverterComplexInputDataProc(AudioConverterRef              inAu
                   completeHandler:completeHandler];
 }
 
-- (AudioConverterRef)getMainAudioConverter {
-    return mAudioConverter;
+- (void)freeEncoder {
+    if (mAudioConverter) {
+        AudioConverterDispose(mAudioConverter);
+        mAudioConverter = NULL;
+    }
 }
 
 #pragma mark - Private
@@ -109,7 +112,7 @@ OSStatus EncodeConverterComplexInputDataProc(AudioConverterRef              inAu
     
     // Create the AudioConverterRef.
     AudioConverterRef converter = NULL;
-    if (![self checkError:AudioConverterNewSpecific(&sourceFormat, &destinationFormat, 1, requestedCodecs, &converter) withErrorString:@"AudioConverterNew failed"]) {
+    if (![self checkError:AudioConverterNewSpecific(&sourceFormat, &destinationFormat, destinationFormat.mChannelsPerFrame, requestedCodecs, &converter) withErrorString:@"AudioConverterNew failed"]) {
         return NULL;
     }else {
         printf("Audio converter create successful \n");

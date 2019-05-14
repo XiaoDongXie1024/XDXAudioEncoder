@@ -40,6 +40,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)encodeAudioWithSourceBuffer:(void *)sourceBuffer
                    sourceBufferSize:(UInt32)sourceBufferSize
                     completeHandler:(void(^)(AudioBufferList *destBufferList, UInt32 outputPackets, AudioStreamPacketDescription *outputPacketDescriptions))completeHandler;
+
+
+- (void)freeEncoder;
+
 @end
 
 NS_ASSUME_NONNULL_END

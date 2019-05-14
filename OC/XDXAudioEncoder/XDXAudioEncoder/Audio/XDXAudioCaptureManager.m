@@ -56,7 +56,7 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
     void    *bufferData = m_buffList->mBuffers[0].mData;
     UInt32   bufferSize = m_buffList->mBuffers[0].mDataByteSize;
     
-       // NSLog(@"demon = %d",bufferSize);
+    // NSLog(@"test = %d",bufferSize);
     [manager.audioEncoder encodeAudioWithSourceBuffer:bufferData
                                        sourceBufferSize:bufferSize
                                         completeHandler:^(AudioBufferList * _Nonnull destBufferList, UInt32 outputPackets, AudioStreamPacketDescription * _Nonnull outputPacketDescriptions) {
