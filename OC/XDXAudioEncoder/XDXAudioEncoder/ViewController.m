@@ -8,8 +8,15 @@
 
 #import "ViewController.h"
 #import "XDXAudioCaptureManager.h"
+#import "XDXAduioEncoder.h"
+#import "XDXAudioFileHandler.h"
 #import <AVFoundation/AVFoundation.h>
-@interface ViewController ()
+
+@interface ViewController ()<XDXAudioCaptureDelegate>
+
+@property (nonatomic, assign) BOOL isRecordVoice;
+
+@property (nonatomic, strong) XDXAduioEncoder *audioEncoder;
 
 @end
 
@@ -17,19 +24,59 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    
+    // Capture
+    [XDXAudioCaptureManager getInstance].delegate = self;
     [[XDXAudioCaptureManager getInstance] startAudioCapture];
+    
+    // Encoder
+    AudioStreamBasicDescription audioDataFormat = [[XDXAudioCaptureManager getInstance] getAudioDataFormat];
+    self.audioEncoder = [[XDXAduioEncoder alloc] initWithSourceFormat:audioDataFormat
+                                                         destFormatID:kAudioFormatMPEG4AAC
+                                                           sampleRate:44100
+                                                  isUseHardwareEncode:YES];
 }
 
 - (IBAction)startRecord:(id)sender {
-    [[XDXAudioCaptureManager getInstance] startRecordFile];
+    [self startRecordFile];
 }
 
 - (IBAction)stopRecord:(id)sender {
-    [[XDXAudioCaptureManager getInstance] stopRecordFile];
+    [self stopRecordFile];
 }
 
 - (void)dealloc {
     [[XDXAudioCaptureManager getInstance] stopAudioCapture];
+}
+
+#pragma mark - Record
+- (void)startRecordFile {
+    [[XDXAudioFileHandler getInstance] startVoiceRecordByAudioUnitByAudioConverter:self.audioEncoder->mAudioConverter
+                                                                   needMagicCookie:YES
+                                                                         audioDesc:self.audioEncoder->mDestinationFormat];
+    self.isRecordVoice = YES;
+}
+
+- (void)stopRecordFile {
+    self.isRecordVoice = NO;
+    [[XDXAudioFileHandler getInstance] stopVoiceRecordAudioConverter:self.audioEncoder->mAudioConverter
+                                                     needMagicCookie:YES];
+}
+
+#pragma mark - Delegate
+- (void)receiveAudioDataByDevice:(XDXCaptureAudioDataRef)audioDataRef {
+    [self.audioEncoder encodeAudioWithSourceBuffer:audioDataRef->data
+                                  sourceBufferSize:audioDataRef->size
+                                   completeHandler:^(AudioBufferList * _Nonnull destBufferList, UInt32 outputPackets, AudioStreamPacketDescription * _Nonnull outputPacketDescriptions) {
+                                       if (self.isRecordVoice) {
+                                           [[XDXAudioFileHandler getInstance] writeFileWithInNumBytes:destBufferList->mBuffers->mDataByteSize
+                                                                                         ioNumPackets:outputPackets
+                                                                                             inBuffer:destBufferList->mBuffers->mData
+                                                                                         inPacketDesc:outputPacketDescriptions];
+                                       }
+                                       
+                                       free(destBufferList->mBuffers->mData);
+                                   }];
 }
 
 @end

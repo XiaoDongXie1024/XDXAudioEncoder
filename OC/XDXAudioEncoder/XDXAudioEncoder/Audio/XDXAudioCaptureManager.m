@@ -8,9 +8,6 @@
 
 #import "XDXAudioCaptureManager.h"
 #import <AudioToolbox/AudioToolbox.h>
-#import "XDXAudioFileHandler.h"
-#import <AVFoundation/AVFoundation.h>
-#import "XDXAduioEncoder.h"
 
 #define kXDXAudioPCMFramesPerPacket 1
 #define KXDXAudioBitsPerChannel 16
@@ -27,9 +24,6 @@ static AudioStreamBasicDescription  m_audioDataFormat;
 @interface XDXAudioCaptureManager ()
 
 @property (nonatomic, assign, readwrite) BOOL isRunning;
-//@property (nonatomic, assign) BOOL isRecordVoice;
-
-@property (nonatomic, strong) XDXAduioEncoder *audioEncoder;
 
 @end
 
@@ -56,22 +50,20 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
     void    *bufferData = m_buffList->mBuffers[0].mData;
     UInt32   bufferSize = m_buffList->mBuffers[0].mDataByteSize;
     
-    // NSLog(@"test = %d",bufferSize);
-    [manager.audioEncoder encodeAudioWithSourceBuffer:bufferData
-                                       sourceBufferSize:bufferSize
-                                        completeHandler:^(AudioBufferList * _Nonnull destBufferList, UInt32 outputPackets, AudioStreamPacketDescription * _Nonnull outputPacketDescriptions) {
-                                            if (manager.isRecordVoice) {
-                                                [[XDXAudioFileHandler getInstance] writeFileWithInNumBytes:destBufferList->mBuffers->mDataByteSize
-                                                                                              ioNumPackets:outputPackets
-                                                                                                  inBuffer:destBufferList->mBuffers->mData
-                                                                                              inPacketDesc:outputPacketDescriptions];
-                                            }
-                                            
-                                            free(destBufferList->mBuffers->mData);
-                                        }];
+    //    NSLog(@"demon = %d",bufferSize);
     
-
+    struct XDXCaptureAudioData audioData = {
+        .data           = bufferData,
+        .size           = bufferSize,
+        .inNumberFrames = inNumberFrames,
+    };
     
+    XDXCaptureAudioDataRef audioDataRef = &audioData;
+    
+    if ([manager.delegate respondsToSelector:@selector(receiveAudioDataByDevice:)]) {
+        [manager.delegate receiveAudioDataByDevice:audioDataRef];
+    }
+        
     return noErr;
 }
 
@@ -94,6 +86,9 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
     [self freeAudioUnit:m_audioUnit];
     self.isRunning = NO;
 }
+- (AudioStreamBasicDescription)getAudioDataFormat {
+    return m_audioDataFormat;
+}
 
 #pragma mark - Init
 - (instancetype)init {
@@ -109,11 +104,6 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
                                    audioBufferSize:2048
                                        durationSec:0.02
                                           callBack:AudioCaptureCallback];
-        
-        self->_audioEncoder = [[XDXAduioEncoder alloc] initWithSourceFormat:m_audioDataFormat
-                                                               destFormatID:kAudioFormatMPEG4AAC
-                                                                 sampleRate:44100
-                                                        isUseHardwareEncode:YES];
     });
     return _instace;
 }
@@ -183,13 +173,13 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
     
     result = AudioUnitUninitialize(m_audioUnit);
     if (result != noErr) {
-        NSLog(@"%@:  %s - uninitialize audio unit failed, status : %d",kModuleName,__func__,(int)result);
+        NSLog(@"%@:  %s - uninitialize audio unit failed, status : %d",kModuleName,__func__,result);
     }
     
     // It will trigger audio route change repeatedly
     result = AudioComponentInstanceDispose(m_audioUnit);
     if (result != noErr) {
-        NSLog(@"%@:  %s - dispose audio unit failed. status : %d",kModuleName,__func__,(int)result);
+        NSLog(@"%@:  %s - dispose audio unit failed. status : %d",kModuleName,__func__,result);
     }else {
         audioUnit = nil;
     }
@@ -216,7 +206,7 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
     // Calls to AudioUnitInitialize() can fail if called back-to-back on different ADM instances. A fall-back solution is to allow multiple sequential calls with as small delay between each. This factor sets the max number of allowed initialization attempts.
     OSStatus status = AudioUnitInitialize(audioUnit);
     if (status != noErr) {
-        NSLog(@"%@:  %s - couldn't init audio unit instance, status : %d \n",kModuleName,__func__,(int)status);
+        NSLog(@"%@:  %s - couldn't init audio unit instance, status : %d \n",kModuleName,__func__,status);
     }
     
     return audioUnit;
@@ -234,7 +224,7 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
     AudioComponent inputComponent = AudioComponentFindNext(NULL, &audioDesc);
     OSStatus status = AudioComponentInstanceNew(inputComponent, &audioUnit);
     if (status != noErr)  {
-        NSLog(@"%@:  %s - create audio unit failed, status : %d \n",kModuleName, __func__, (int)status);
+        NSLog(@"%@:  %s - create audio unit failed, status : %d \n",kModuleName, __func__, status);
         return NULL;
     }else {
         return audioUnit;
@@ -251,9 +241,9 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
                                            &flag,
                                            sizeof(flag));
     if (status != noErr) {
-        NSLog(@"%@:  %s - couldn't allocate buffer of callback, status : %d \n", kModuleName, __func__, (int)status);
+        NSLog(@"%@:  %s - couldn't allocate buffer of callback, status : %d \n", kModuleName, __func__, status);
     }
-    
+
     AudioBufferList * buffList = (AudioBufferList*)malloc(sizeof(AudioBufferList));
     buffList->mNumberBuffers               = 1;
     buffList->mBuffers[0].mNumberChannels  = channelCount;
@@ -272,7 +262,7 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
                                   &dataFormat,
                                   sizeof(dataFormat));
     if (status != noErr) {
-        NSLog(@"%@:  %s - set audio unit stream format failed, status : %d \n",kModuleName, __func__,(int)status);
+        NSLog(@"%@:  %s - set audio unit stream format failed, status : %d \n",kModuleName, __func__,status);
     }
     
     /*
@@ -294,7 +284,7 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
                                   &enableFlag,
                                   sizeof(enableFlag));
     if (status != noErr) {
-        NSLog(@"%@:  %s - could not enable input on AURemoteIO, status : %d \n",kModuleName, __func__, (int)status);
+        NSLog(@"%@:  %s - could not enable input on AURemoteIO, status : %d \n",kModuleName, __func__, status);
     }
     
     UInt32 disableFlag = 0;
@@ -305,7 +295,7 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
                                   &disableFlag,
                                   sizeof(disableFlag));
     if (status != noErr) {
-        NSLog(@"%@:  %s - could not enable output on AURemoteIO, status : %d \n",kModuleName, __func__,(int)status);
+        NSLog(@"%@:  %s - could not enable output on AURemoteIO, status : %d \n",kModuleName, __func__,status);
     }
 }
 
@@ -321,7 +311,7 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
                                                             sizeof(captureCallback));
     
     if (status != noErr) {
-        NSLog(@"%@:  %s - Audio Unit set capture callback failed, status : %d \n",kModuleName, __func__,(int)status);
+        NSLog(@"%@:  %s - Audio Unit set capture callback failed, status : %d \n",kModuleName, __func__,status);
     }
 }
 
@@ -336,7 +326,7 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
                             &hardwareSampleRate);
     // Manual set sample rate
     dataFormat.mSampleRate = sampleRate;
-    
+
     size = sizeof(dataFormat.mChannelsPerFrame);
     // Get hardware origin channels number. (Must refer to it)
     UInt32 hardwareNumberChannels = 0;
@@ -353,23 +343,9 @@ static OSStatus AudioCaptureCallback(void                       *inRefCon,
         dataFormat.mBytesPerPacket  = dataFormat.mBytesPerFrame = (dataFormat.mBitsPerChannel / 8) * dataFormat.mChannelsPerFrame;
         dataFormat.mFramesPerPacket = kXDXAudioPCMFramesPerPacket;
     }
-    
+
     memcpy(audioFormat, &dataFormat, sizeof(dataFormat));
-    NSLog(@"%@:  %s - sample rate:%f, channel count:%u",kModuleName, __func__,sampleRate,(unsigned int)channelCount);
-}
-
-#pragma mark - Record
-- (void)startRecordFile {
-    [[XDXAudioFileHandler getInstance] startVoiceRecordByAudioUnitByAudioConverter:self.audioEncoder->mAudioConverter
-                                                                   needMagicCookie:YES
-                                                                         audioDesc:self.audioEncoder->mDestinationFormat];
-    self.isRecordVoice = YES;
-}
-
-- (void)stopRecordFile {
-    self.isRecordVoice = NO;
-    [[XDXAudioFileHandler getInstance] stopVoiceRecordAudioConverter:self.audioEncoder->mAudioConverter
-                                                     needMagicCookie:YES];
+    NSLog(@"%@:  %s - sample rate:%f, channel count:%d",kModuleName, __func__,sampleRate,channelCount);
 }
 
 @end
