@@ -67,15 +67,16 @@
 - (void)receiveAudioDataByDevice:(XDXCaptureAudioDataRef)audioDataRef {
     [self.audioEncoder encodeAudioWithSourceBuffer:audioDataRef->data
                                   sourceBufferSize:audioDataRef->size
-                                   completeHandler:^(AudioBufferList * _Nonnull destBufferList, UInt32 outputPackets, AudioStreamPacketDescription * _Nonnull outputPacketDescriptions) {
+                                               pts:audioDataRef->pts
+                                   completeHandler:^(XDXAudioEncderDataRef dataRef) {
                                        if (self.isRecordVoice) {
-                                           [[XDXAudioFileHandler getInstance] writeFileWithInNumBytes:destBufferList->mBuffers->mDataByteSize
-                                                                                         ioNumPackets:outputPackets
-                                                                                             inBuffer:destBufferList->mBuffers->mData
-                                                                                         inPacketDesc:outputPacketDescriptions];
+                                           [[XDXAudioFileHandler getInstance] writeFileWithInNumBytes:dataRef->size
+                                                                                         ioNumPackets:dataRef->outputPackets
+                                                                                             inBuffer:dataRef->data
+                                                                                         inPacketDesc:dataRef->outputPacketDescriptions];
                                        }
                                        
-                                       free(destBufferList->mBuffers->mData);
+                                       free(dataRef->data);
                                    }];
 }
 

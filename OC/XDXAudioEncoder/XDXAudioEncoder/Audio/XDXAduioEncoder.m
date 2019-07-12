@@ -54,10 +54,11 @@ OSStatus EncodeConverterComplexInputDataProc(AudioConverterRef              inAu
     return self;
 }
 
-- (void)encodeAudioWithSourceBuffer:(void *)sourceBuffer sourceBufferSize:(UInt32)sourceBufferSize completeHandler:(void(^)(AudioBufferList *destBufferList, UInt32 outputPackets, AudioStreamPacketDescription *outputPacketDescriptions))completeHandler {
+- (void)encodeAudioWithSourceBuffer:(void *)sourceBuffer sourceBufferSize:(UInt32)sourceBufferSize pts:(int64_t)pts completeHandler:(void(^)(XDXAudioEncderDataRef audioDataRef))completeHandler {
     [self encodeFormatByConverter:mAudioConverter
                      sourceBuffer:sourceBuffer
                  sourceBufferSize:sourceBufferSize
+                              pts:pts
                      sourceFormat:mSourceFormat
                              dest:mDestinationFormat
                   completeHandler:completeHandler];
@@ -196,7 +197,7 @@ OSStatus EncodeConverterComplexInputDataProc(AudioConverterRef              inAu
 }
 
 
-- (void)encodeFormatByConverter:(AudioConverterRef)audioConverter sourceBuffer:(void *)sourceBuffer sourceBufferSize:(UInt32)sourceBufferSize sourceFormat:(AudioStreamBasicDescription)sourceFormat dest:(AudioStreamBasicDescription)destFormat completeHandler:(void(^)(AudioBufferList *destBufferList, UInt32 outputPackets, AudioStreamPacketDescription *outputPacketDescriptions))completeHandler {
+- (void)encodeFormatByConverter:(AudioConverterRef)audioConverter sourceBuffer:(void *)sourceBuffer sourceBufferSize:(UInt32)sourceBufferSize pts:(int64_t)pts sourceFormat:(AudioStreamBasicDescription)sourceFormat dest:(AudioStreamBasicDescription)destFormat completeHandler:(void(^)(XDXAudioEncderDataRef audioDataRef))completeHandler {
     
     UInt32 outputSizePerPacket = destFormat.mBytesPerPacket;
     if (outputSizePerPacket == 0) {
@@ -248,8 +249,18 @@ OSStatus EncodeConverterComplexInputDataProc(AudioConverterRef              inAu
             // This is the EOF condition.
             status = noErr;
         }
+ 
+        struct XDXAudioEncderData data = {
+            .data = fillBufferList.mBuffers->mData,
+            .size = fillBufferList.mBuffers->mDataByteSize,
+            .pts  = pts,
+            .outputPackets = ioOutputDataPackets,
+            .outputPacketDescriptions = &outputPacketDescriptions,
+        };
         
-        completeHandler(&fillBufferList, ioOutputDataPackets, &outputPacketDescriptions);
+        if (completeHandler) {
+            completeHandler(&data);
+        }
     }
 }
 
